@@ -809,7 +809,7 @@
     "@math.gl/polygon" "^4.1.0"
     pbf "^3.2.1"
 
-"@loaders.gl/gltf@4.3.2", "@loaders.gl/gltf@^4.2.0":
+"@loaders.gl/gltf@4.3.2", "@loaders.gl/gltf@^4.2.0", "@loaders.gl/gltf@^4.3.2":
   version "4.3.2"
   resolved "https://registry.yarnpkg.com/@loaders.gl/gltf/-/gltf-4.3.2.tgz#8bc5eea7a2b22efc951e151aa55b6f7fab4aecd3"
   integrity sha512-VnjbM3lYrO4zKO+DZevx7WZybxkXNAbYEWWcdP5qwj61nTWyplxjLdCUQlcPhzUDqmFf9dwYxMXIcm/L62WgRQ==

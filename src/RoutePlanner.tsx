@@ -1,28 +1,27 @@
 import React, { useState, useRef } from 'react';
 import DeckGL from '@deck.gl/react';
 import { Tile3DLayer } from '@deck.gl/geo-layers';
-import { GeoJsonLayer, LineLayer, IconLayer } from '@deck.gl/layers';
+import { GeoJsonLayer, LineLayer } from '@deck.gl/layers';
 import { Box, Button, Slider, SliderTrack, SliderFilledTrack, SliderThumb, VStack, HStack, Text } from '@chakra-ui/react';
-import { MapView } from 'deck.gl';
+import { FirstPersonView, LinearInterpolator, MapView } from 'deck.gl';
+import { ScenegraphLayer } from '@deck.gl/mesh-layers';
 
 const defaultInitialViewState = {
     main: {
-        longitude: -0.0834,
-        latitude: 51.5132,
+        longitude: 0.0670132303265234,
+        latitude: 50.78194101294781,
         zoom: 18,
         pitch: 45,
         bearing: 0,
     },
     drone: {
-        longitude: -0.0834,
-        latitude: 51.5132,
-        zoom: 18,
-        pitch: 45,
+        longitude: 0.0670132303265234,
+        latitude: 50.78194101294781,
+        pitch: 10,
+        position: [0, 0, 50],
         bearing: 0,
     },
 };
-
-const arrowIcon = 'data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-up"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>';
 
 const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
     const [viewState, setViewState] = useState(initialViewState);
@@ -32,27 +31,39 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
     const [drawing, setDrawing] = useState(false);
     const deckRef = useRef(null);
 
+    const calculateCircleCenter = (location) => {
+        const { sourcePosition } = location;
+        return {
+            longitude: sourcePosition[0],
+            latitude: sourcePosition[1],
+            altitude: sourcePosition[2] + location.height
+        };
+    };
+
+    const calculateBearingToCenter = (point, center) => {
+        const dx = center.longitude - point.geometry.coordinates[0];
+        const dy = center.latitude - point.geometry.coordinates[1];
+        return (Math.atan2(dy, dx) * 180) / Math.PI;
+    };
+
     const handleMapClick = async (event) => {
         if (!drawing || !deckRef.current) return;
 
-        // Use pickObject to get the 3D coordinate
         const picked = await deckRef.current.pickObject({
             x: event.x,
             y: event.y,
-            unproject3D: true, // Enable 3D unprojection to include altitude
+            unproject3D: true,
         });
 
         if (picked && picked.coordinate) {
             const [longitude, latitude, altitude = 0] = picked.coordinate;
-
-            // Add a new location to the array with default height
             setLocations((prev) => [
                 ...prev,
                 {
-                    id: Date.now(), // Unique identifier
+                    id: Date.now(),
                     sourcePosition: [longitude, latitude, altitude],
-                    targetPosition: [longitude, latitude, altitude + 40], // Default height
-                    height: 40, // Default height
+                    targetPosition: [longitude, latitude, altitude + 40],
+                    height: 40,
                 },
             ]);
         }
@@ -80,9 +91,10 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
         const { targetPosition } = location;
         const [centerLon, centerLat, centerAlt] = targetPosition;
         const radius = 20;
-        const numPoints = 4;
-
+        const numPoints = 8;
         const R = 6371000;
+
+        const center = calculateCircleCenter(location);
 
         const circleGeoJSON = {
             type: 'FeatureCollection',
@@ -94,24 +106,22 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
                 const deltaLon = (offsetX / R) / Math.cos((centerLat * Math.PI) / 180);
                 const deltaLat = offsetY / R;
 
-                // Calculate bearing toward center
-                const dx = -offsetX;
-                const dy = -offsetY;
-                const bearing = (Math.atan2(dy, dx) * 180) / Math.PI;
+                const pointCoords = [
+                    centerLon + (deltaLon * 180) / Math.PI,
+                    centerLat + (deltaLat * 180) / Math.PI,
+                    centerAlt + 5,
+                ];
 
                 return {
                     type: 'Feature',
                     geometry: {
                         type: 'Point',
-                        coordinates: [
-                            centerLon + (deltaLon * 180) / Math.PI,
-                            centerLat + (deltaLat * 180) / Math.PI,
-                            centerAlt + 5,
-                        ],
+                        coordinates: pointCoords,
                     },
                     properties: {
                         id: `${location.id}-${i}`,
-                        bearing: bearing
+                        bearing: angle * (180 / Math.PI),
+                        center: center
                     },
                 };
             }),
@@ -131,35 +141,106 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
     };
 
     const handleViewStateChange = ({ viewId, viewState: updatedViewState }) => {
-        if (viewId === 'main') {
+        setViewState((prev) => ({
+            ...prev,
+            [viewId]: updatedViewState,
+        }));
+    };
+
+    const handleDotHover = (info) => {
+        if (info.object) {
+            const center = info.object.properties.center;
+            const bearingToCenter = calculateBearingToCenter(info.object, center);
+
             setViewState((prev) => ({
                 ...prev,
-                main: updatedViewState,
+                drone: {
+                    ...prev.drone,
+                    longitude: info.object.geometry.coordinates[0],
+                    latitude: info.object.geometry.coordinates[1],
+                    position: [0, 0, info.object.geometry.coordinates[2]],
+                    bearing: bearingToCenter +180 ,
+                    pitch: 20,
+                    transitionDuration: 1000,
+                    transitionInterpolator: new LinearInterpolator(['longitude', 'latitude', 'bearing', 'pitch']),
+                },
             }));
+
+            setHoveredDot({
+                longitude: info.object.geometry.coordinates[0],
+                latitude: info.object.geometry.coordinates[1],
+                altitude: info.object.geometry.coordinates[2],
+                centerPoint: center
+            });
+        } else {
+            setHoveredDot(null);
         }
     };
 
+    const layers = [
+        new Tile3DLayer({
+            id: 'main-google-3d-tiles',
+            data: `https://tile.googleapis.com/v1/3dtiles/root.json`,
+            pickable: true,
+            opacity: 0.5,
+            loadOptions: {
+                fetch: {
+                    headers: {
+                        'X-GOOG-API-KEY': 'AIzaSyCwmX_Ejr4hEyGDZfgBWPgLYzIqMhY1P3M',
+                    },
+                },
+            },
+        }),
 
-    // First define your SVG arrow icon mapping
-    const iconMapping = {
-        arrow: {
-            x: 0,
-            y: 0,
-            width: 32,
-            height: 32,
-            mask: true
-        }
-    };
+        new Tile3DLayer({
+            id: 'drone-google-3d-tiles',
+            data: `https://tile.googleapis.com/v1/3dtiles/root.json`,
+            pickable: true,
+            opacity: 1,
+            loadOptions: {
+                fetch: {
+                    headers: {
+                        'X-GOOG-API-KEY': 'AIzaSyCwmX_Ejr4hEyGDZfgBWPgLYzIqMhY1P3M',
+                    },
+                },
+            },
+        }),
 
+        new LineLayer({
+            id: 'main-line-layer',
+            data: locations,
+            getSourcePosition: (d) => d.sourcePosition,
+            getTargetPosition: (d) => d.targetPosition,
+            getColor: [0, 0, 255, 100],
+            getWidth: 2,
+        }),
 
-    // Create SVG for arrow
-    const arrowSvg = `
-<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-    <path d="M16 2 L30 28 L16 22 L2 28 Z" fill="currentColor"/>
-</svg>`;
+        ...circles.map((circle, index) =>
+            new GeoJsonLayer({
+                id: `main-circle-${index}`,
+                data: circle,
+                pointType: 'circle',
+                opacity: 0.1,
+                getPointRadius: 5,
+                getFillColor: [255, 0, 0, 0],
+                pickable: true,
+                onHover: handleDotHover,
+            })
+        ),
 
-    const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(arrowSvg)}`;
-
+        ...circles.map((c, index) =>
+            new ScenegraphLayer({
+                id: `main-camera-${index}`,
+                data: c.features,
+                scenegraph: '/camera.glb',
+                getTranslation: [0, 0, 2],
+                getOrientation: d => [0, d.properties.bearing - 90, 90],
+                getPosition: (d) => d.geometry.coordinates,
+                getScale: [3, 3, 3],
+                pickable: true,
+            })
+        ),
+    ];
 
     return (
         <Box position="relative" width="100vw" height="100vh">
@@ -175,98 +256,24 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
                         height: '100%',
                         width: '100%',
                     }),
-                    new MapView({
+                    new FirstPersonView({
                         clear: true,
                         id: 'drone',
-                        x: '60%',
+                        fovy : 35,
+                        x: '70%',
                         y: '0%',
-                        height: '40%',
-                        width: '40%',
+                        height: '300px',
+                        width: '300px',
                     }),
                 ]}
                 useDevicePixels={1}
-                onViewStateChange={({ viewId, viewState: updatedViewState }) =>
-                    handleViewStateChange({ viewId, viewState: updatedViewState })
-                }
+                onViewStateChange={handleViewStateChange}
                 onClick={handleMapClick}
                 layerFilter={layerFilter}
-                layers={[
-                    new Tile3DLayer({
-                        id: 'main-google-3d-tiles',
-                        data: `https://tile.googleapis.com/v1/3dtiles/root.json`,
-                        pickable: true,
-                        loadOptions: {
-                            fetch: {
-                                headers: {
-                                    'X-GOOG-API-KEY': 'AIzaSyCwmX_Ejr4hEyGDZfgBWPgLYzIqMhY1P3M',
-                                },
-                            },
-                        },
-                    }),
-                    new LineLayer({
-                        id: 'main-line-layer',
-                        data: locations,
-                        getSourcePosition: (d) => d.sourcePosition,
-                        getTargetPosition: (d) => d.targetPosition,
-                        getColor: [0, 0, 255, 255],
-                        getWidth: 2,
-                        // parameters: {
-                        //     depthTest: false,
-                        // },
-                    }),
-                    ...circles.map((circle, index) =>
-                        new GeoJsonLayer({
-                            id: `main-circle-${index}`,
-                            data: circle,
-                            pointType: 'circle',
-                            getPointRadius: 5,
-                            getFillColor: [255, 0, 0, 150],
-                            pickable: true,
-                            // parameters: {
-                            //     depthTest: false,
-                            // },
-                            onHover: (info) => {
-                                if (info.object) {
-                                    setHoveredDot({
-                                        longitude: info.object.geometry.coordinates[0],
-                                        latitude: info.object.geometry.coordinates[1],
-                                        altitude: info.object.geometry.coordinates[2],
-                                    });
-                                } else {
-                                    setHoveredDot(null);
-                                }
-                            },
-                        })
-                    ),
-
-                    ...circles.map((circle, index) =>
-                        new GeoJsonLayer({
-                            id: `main-bearing-${index}`,
-                            data: circle,
-                            pointType: 'icon',
-                            iconAtlas: svgUrl,
-                            billboard : true,
-                            parameters: {
-                                depthTest: false,
-                            },
-                            iconMapping: iconMapping,
-                            getIcon: d => 'arrow',
-                            getIconSize: 12,
-                            getIconColor: [255, 255, 0, 150],
-                            getIconAngle: d => {
-                                console.log(d.properties.bearing)
-                                return d.properties.bearing-90 || 0
-                            },
-                            pickable: true
-                        })
-                    )
-
-
-
-
-                ]}
+                layers={layers}
                 style={{ width: '100vw', height: '100vh' }}
             />
+
             <HStack
                 position="absolute"
                 top="10px"
@@ -326,6 +333,7 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
                     ))}
                 </VStack>
             </HStack>
+
             <Box
                 position="absolute"
                 top="10px"
@@ -339,9 +347,14 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
                 <Text fontWeight="bold">Hovered Dot Details</Text>
                 {hoveredDot ? (
                     <>
+                        <Text>Dot Position:</Text>
                         <Text>Longitude: {hoveredDot.longitude.toFixed(5)}</Text>
                         <Text>Latitude: {hoveredDot.latitude.toFixed(5)}</Text>
                         <Text>Altitude: {hoveredDot.altitude.toFixed(2)}m</Text>
+                        <Text mt={2}>Center Point:</Text>
+                        <Text>Longitude: {hoveredDot.centerPoint.longitude.toFixed(5)}</Text>
+                        <Text>Latitude: {hoveredDot.centerPoint.latitude.toFixed(5)}</Text>
+                        <Text>Altitude: {hoveredDot.centerPoint.altitude.toFixed(2)}m</Text>
                     </>
                 ) : (
                     <Text>No dot hovered</Text>

@@ -13,6 +13,7 @@
     "@chakra-ui/react": "2.10.4",
     "@emotion/react": "^11.13.5",
     "@emotion/styled": "^11.13.5",
+    "@loaders.gl/gltf": "^4.3.2",
     "@tiptap/core": "^2.10.2",
     "@tiptap/react": "^2.10.2",
     "@tiptap/starter-kit": "^2.10.2",
