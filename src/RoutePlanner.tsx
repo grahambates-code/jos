@@ -6,17 +6,20 @@ import { Box, Button, Slider, SliderTrack, SliderFilledTrack, SliderThumb, VStac
 import { FirstPersonView, LinearInterpolator, MapView } from 'deck.gl';
 import { ScenegraphLayer } from '@deck.gl/mesh-layers';
 
+
+// -0.03889788363292723,
+//           51.55753552515887
 const defaultInitialViewState = {
     main: {
-        longitude: 0.0670132303265234,
-        latitude: 50.78194101294781,
+        longitude:  -0.03889788363292723,
+        latitude:  51.55753552515887,
         zoom: 18,
         pitch: 45,
         bearing: 0,
     },
     drone: {
-        longitude: 0.0670132303265234,
-        latitude: 50.78194101294781,
+        longitude:  -0.03889788363292723,
+        latitude:  51.55753552515887,
         pitch: 10,
         position: [0, 0, 50],
         bearing: 0,
@@ -62,8 +65,8 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
                 {
                     id: Date.now(),
                     sourcePosition: [longitude, latitude, altitude],
-                    targetPosition: [longitude, latitude, altitude + 40],
-                    height: 40,
+                    targetPosition: [longitude, latitude, altitude + 60],
+                    height: 60,
                 },
             ]);
         }
@@ -90,8 +93,8 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
     const drawCircle = (location) => {
         const { targetPosition } = location;
         const [centerLon, centerLat, centerAlt] = targetPosition;
-        const radius = 20;
-        const numPoints = 8;
+        const radius = 30;
+        const numPoints = 16;
         const R = 6371000;
 
         const center = calculateCircleCenter(location);
@@ -161,7 +164,7 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
                     position: [0, 0, info.object.geometry.coordinates[2]],
                     bearing: bearingToCenter +180 ,
                     pitch: 20,
-                    transitionDuration: 1000,
+                    transitionDuration: 100,
                     transitionInterpolator: new LinearInterpolator(['longitude', 'latitude', 'bearing', 'pitch']),
                 },
             }));
@@ -247,7 +250,7 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
             <DeckGL
                 ref={deckRef}
                 viewState={viewState}
-                controller={true}
+                //controller={true}
                 views={[
                     new MapView({
                         id: 'main',
@@ -255,6 +258,7 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
                         y: '0%',
                         height: '100%',
                         width: '100%',
+                        controller : true
                     }),
                     new FirstPersonView({
                         clear: true,
@@ -264,6 +268,10 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
                         y: '0%',
                         height: '300px',
                         width: '300px',
+                        controller : {
+                            dragMode : ""
+                        }
+
                     }),
                 ]}
                 useDevicePixels={1}
