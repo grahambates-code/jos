@@ -268,9 +268,7 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
                         y: '0%',
                         height: '300px',
                         width: '300px',
-                        controller : {
-                            dragMode : ""
-                        }
+                        controller : true
 
                     }),
                 ]}
