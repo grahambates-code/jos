@@ -17,6 +17,7 @@
     "@tiptap/core": "^2.10.2",
     "@tiptap/react": "^2.10.2",
     "@tiptap/starter-kit": "^2.10.2",
+    "@turf/turf": "^7.1.0",
     "d3-ease": "^3.0.1",
     "deck.gl": "9.0.36",
     "framer-motion": "^11.11.17",

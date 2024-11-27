@@ -1,14 +1,12 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import DeckGL from '@deck.gl/react';
 import { Tile3DLayer } from '@deck.gl/geo-layers';
 import { GeoJsonLayer, LineLayer } from '@deck.gl/layers';
 import { Box, Button, Slider, SliderTrack, SliderFilledTrack, SliderThumb, VStack, HStack, Text } from '@chakra-ui/react';
-import { FirstPersonView, LinearInterpolator, MapView } from 'deck.gl';
+import { FirstPersonView, LinearInterpolator, MapView, PickingInfo } from 'deck.gl';
 import { ScenegraphLayer } from '@deck.gl/mesh-layers';
+import { createCircle } from './utils/cameraCirlcleGeojson';
 
-
-// -0.03889788363292723,
-//           51.55753552515887
 const defaultInitialViewState = {
     main: {
         longitude:  -0.03889788363292723,
@@ -21,35 +19,20 @@ const defaultInitialViewState = {
         longitude:  -0.03889788363292723,
         latitude:  51.55753552515887,
         pitch: 10,
-        position: [0, 0, 50],
+        position: [0, 0, 150],
         bearing: 0,
     },
 };
 
 const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
-    const [viewState, setViewState] = useState(initialViewState);
-    const [locations, setLocations] = useState([]);
-    const [circles, setCircles] = useState([]);
-    const [hoveredDot, setHoveredDot] = useState(null);
-    const [drawing, setDrawing] = useState(false);
-    const deckRef = useRef(null);
+    const [viewState, setViewState] = useState<any>(initialViewState);
+    const [locations, setLocations] = useState<any[]>([]);
+    const [circles, setCircles] = useState<any[]>([]);
+    const [hoveredDot, setHoveredDot] = useState<any>(null);
+    const [drawing, setDrawing] = useState<boolean>(false);
+    const deckRef:any = useRef(null);
 
-    const calculateCircleCenter = (location) => {
-        const { sourcePosition } = location;
-        return {
-            longitude: sourcePosition[0],
-            latitude: sourcePosition[1],
-            altitude: sourcePosition[2] + location.height
-        };
-    };
-
-    const calculateBearingToCenter = (point, center) => {
-        const dx = center.longitude - point.geometry.coordinates[0];
-        const dy = center.latitude - point.geometry.coordinates[1];
-        return (Math.atan2(dy, dx) * 180) / Math.PI;
-    };
-
-    const handleMapClick = async (event) => {
+    const handleMapClick = async (event:PickingInfo) => {
         if (!drawing || !deckRef.current) return;
 
         const picked = await deckRef.current.pickObject({
@@ -68,13 +51,13 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
                     targetPosition: [longitude, latitude, altitude + 60],
                     height: 60,
                 },
-            ]);
+            ] as never[]);
         }
     };
 
-    const updateLocationHeight = (id, newHeight) => {
-        setLocations((prev) =>
-            prev.map((location) =>
+    const updateLocationHeight = (id:string, newHeight:number) => {
+        setLocations((prev:any) =>
+            prev.map((location:any) =>
                 location.id === id
                     ? {
                         ...location,
@@ -90,50 +73,26 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
         );
     };
 
-    const drawCircle = (location) => {
+    const drawCircle = (location:any) => {
         const { targetPosition } = location;
         const [centerLon, centerLat, centerAlt] = targetPosition;
         const radius = 30;
-        const numPoints = 16;
-        const R = 6371000;
+        const numPoints = 4;
+            
+        const circleGeoJSON= createCircle({
+            numberOfPoints: numPoints,
+            radius,
+            lattitude: centerLat,
+            longitude: centerLon,
+            altitude: centerAlt,
+            locationId: location.id
+        })
 
-        const center = calculateCircleCenter(location);
-
-        const circleGeoJSON = {
-            type: 'FeatureCollection',
-            features: Array.from({ length: numPoints }, (_, i) => {
-                const angle = (2 * Math.PI * i) / numPoints;
-                const offsetX = radius * Math.cos(angle);
-                const offsetY = radius * Math.sin(angle);
-
-                const deltaLon = (offsetX / R) / Math.cos((centerLat * Math.PI) / 180);
-                const deltaLat = offsetY / R;
-
-                const pointCoords = [
-                    centerLon + (deltaLon * 180) / Math.PI,
-                    centerLat + (deltaLat * 180) / Math.PI,
-                    centerAlt + 5,
-                ];
-
-                return {
-                    type: 'Feature',
-                    geometry: {
-                        type: 'Point',
-                        coordinates: pointCoords,
-                    },
-                    properties: {
-                        id: `${location.id}-${i}`,
-                        bearing: angle * (180 / Math.PI),
-                        center: center
-                    },
-                };
-            }),
-        };
-
-        setCircles((prev) => [...prev, circleGeoJSON]);
+        setCircles((prev:any) => [...prev, circleGeoJSON]);
     };
 
-    const layerFilter = ({ layer, viewport }) => {
+    const layerFilter = (obj:{[key:string]:any}) => {
+        const { layer, viewport } = obj;
         const viewId = viewport.id;
         if (viewId.startsWith('main')) {
             return layer.id.startsWith('main');
@@ -143,37 +102,40 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
         return false;
     };
 
-    const handleViewStateChange = ({ viewId, viewState: updatedViewState }) => {
-        setViewState((prev) => ({
+    const handleViewStateChange = (obj:any) => {
+        const { viewId, viewState } = obj;
+        setViewState((prev:never[]) => ({
             ...prev,
-            [viewId]: updatedViewState,
+            [viewId]: viewState,
         }));
     };
 
-    const handleDotHover = (info) => {
+    const handleDotHover = (info:PickingInfo) => {
         if (info.object) {
             const center = info.object.properties.center;
-            const bearingToCenter = calculateBearingToCenter(info.object, center);
+            console.log(center)
+            // const bearingToCenter = calculateBearingToCenter(info.object, center);
 
-            setViewState((prev) => ({
+            setViewState((prev:any) => ({
                 ...prev,
                 drone: {
                     ...prev.drone,
                     longitude: info.object.geometry.coordinates[0],
                     latitude: info.object.geometry.coordinates[1],
                     position: [0, 0, info.object.geometry.coordinates[2]],
-                    bearing: bearingToCenter +180 ,
-                    pitch: 20,
+                    bearing: info.object.properties.bearing,
+                    pitch:45,
+                    
                     transitionDuration: 100,
                     transitionInterpolator: new LinearInterpolator(['longitude', 'latitude', 'bearing', 'pitch']),
                 },
             }));
-
+           
             setHoveredDot({
                 longitude: info.object.geometry.coordinates[0],
                 latitude: info.object.geometry.coordinates[1],
                 altitude: info.object.geometry.coordinates[2],
-                centerPoint: center
+                centerPoint: info.object.properties.center
             });
         } else {
             setHoveredDot(null);
@@ -219,7 +181,9 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
         }),
 
         ...circles.map((circle, index) =>
-            new GeoJsonLayer({
+           {
+      
+            return  new GeoJsonLayer({
                 id: `main-circle-${index}`,
                 data: circle,
                 pointType: 'circle',
@@ -229,19 +193,23 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
                 pickable: true,
                 onHover: handleDotHover,
             })
+           }
         ),
 
         ...circles.map((c, index) =>
-            new ScenegraphLayer({
+           {
+           
+            return  new ScenegraphLayer({
                 id: `main-camera-${index}`,
                 data: c.features,
                 scenegraph: '/camera.glb',
                 getTranslation: [0, 0, 2],
-                getOrientation: d => [0, d.properties.bearing - 90, 90],
+                getOrientation: d => [0, 180-d.properties.bearing, 90 + viewState.drone.pitch],
                 getPosition: (d) => d.geometry.coordinates,
                 getScale: [3, 3, 3],
                 pickable: true,
             })
+           }
         ),
     ];
 
@@ -351,16 +319,16 @@ const MyDeckGLComponent = ({ initialViewState = defaultInitialViewState }) => {
                 minWidth="200px"
             >
                 <Text fontWeight="bold">Hovered Dot Details</Text>
-                {hoveredDot ? (
+                {hoveredDot && hoveredDot.longitude ? (
                     <>
                         <Text>Dot Position:</Text>
                         <Text>Longitude: {hoveredDot.longitude.toFixed(5)}</Text>
                         <Text>Latitude: {hoveredDot.latitude.toFixed(5)}</Text>
                         <Text>Altitude: {hoveredDot.altitude.toFixed(2)}m</Text>
                         <Text mt={2}>Center Point:</Text>
-                        <Text>Longitude: {hoveredDot.centerPoint.longitude.toFixed(5)}</Text>
-                        <Text>Latitude: {hoveredDot.centerPoint.latitude.toFixed(5)}</Text>
-                        <Text>Altitude: {hoveredDot.centerPoint.altitude.toFixed(2)}m</Text>
+                        <Text>Longitude: {hoveredDot.centerPoint.geometry.coordinates[0].toFixed(5)}</Text>
+                        <Text>Latitude: {hoveredDot.centerPoint.geometry.coordinates[1]}</Text>
+                        <Text>Altitude: {hoveredDot.centerPoint.geometry.coordinates[2]}</Text>
                     </>
                 ) : (
                     <Text>No dot hovered</Text>
